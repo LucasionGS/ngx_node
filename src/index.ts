@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import blessed from "blessed";
 import cp from "child_process";
 import { mkdirSync } from "fs";
