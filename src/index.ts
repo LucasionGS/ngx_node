@@ -6,14 +6,19 @@ import { existsSync, linkSync, readFileSync, readdirSync, rmSync, writeFileSync 
 import { userInfo } from "os";
 import YAML from "yaml";
 
+const args = process.argv.slice(2);
 // Initialize config
 const user = userInfo();
-if (user.username !== "root") {
+if (user.username !== "root" && !args.includes("--no-root")) {
   console.error("You must run this program as root");
   process.exit(1);
 }
 
-if (!existsSync(`${user.homedir}/.ngx`)) mkdirSync(`${user.homedir}/.config/ngx`, { recursive: true });
+function ensureRoot() {
+  return user.username === "root";
+}
+
+if (!existsSync(`${user.homedir}/.ngx`)) mkdirSync(`${user.homedir}/.ngx`, { recursive: true });
 class Config {
   nginxPath: string;
   sitesAvailable: string;
@@ -56,6 +61,9 @@ class NginxServer {
   port: number[];
   root: string;
   enabled: boolean;
+  proxyUrl: string;
+  index: string[];
+  php: string;
 
   getContent() {
     return readFileSync(`${config.sitesAvailable}/${this.name}`, "utf8");
@@ -67,26 +75,49 @@ class NginxServer {
   }
 
   public static reloadNginx() {
-    cp.execSync("systemctl reload nginx");
+    screen.exec("systemctl", ["reload", "nginx"], {}, (err) => {
+      if (err) {
+        footer.setContent(err.message);
+      }
+      else {
+        footer.setContent("Nginx reload successful");
+      }
+      screen.render();
+    });
   }
 
   public static restartNginx() {
-    cp.execSync("systemctl restart nginx");
+    screen.exec("systemctl", ["restart", "nginx"], {}, (err) => {
+      if (err) {
+        footer.setContent(err.message);
+      }
+      else {
+        footer.setContent("Nginx restart successful");
+      }
+      screen.render();
+    });
   }
 
   reload() {
     const content = readFileSync(`${config.sitesAvailable}/${this.name}`, "utf8");
 
-    const host = (content.match(/server_name\s+(.+);/)?.slice(1)[0] || "").split(" ");
-    const _p = Array.from(content.matchAll(/\s*listen\s+(\d+)/g)).map(m => +m[1]).filter(a => !isNaN(a));
+    const host = (content.match(/^\s*server_name\s+(.+);/m)?.slice(1)[0] || "").split(" ");
+    const _p = Array.from(content.matchAll(/^\s*listen\s+(\d+)/gm)).map(m => +m[1]).filter(a => !isNaN(a));
     const port = _p || [];
-    const root = content.match(/root\s+(.+);/)?.slice(1)[0] || "";
+    const root = content.match(/^\s*root\s+(.+);/m)?.slice(1)[0] || "";
     const enabled = existsSync(`${config.sitesEnabled}/${this.name}`);
+    const proxyUrl = content.match(/^\s*proxy_pass\s+(.+);/m)?.slice(1)[0] || "";
+    const index = (content.match(/^\s*index\s+(.+);/m)?.slice(1)[0] || "").split(" ");
+    const php = content.match(/^\s*fastcgi_pass\s+(.+);/m)?.slice(1)[0] || "";
+
 
     this.hosts = host;
     this.port = port;
     this.root = root;
     this.enabled = enabled;
+    this.proxyUrl = proxyUrl;
+    this.index = index;
+    this.php = php;
   }
 
   enable() {
@@ -229,6 +260,55 @@ editConfigButton.on("press", async () => {
   }
   screen.render();
 });
+
+const exitButton = blessed.button({
+  parent: header,
+  mouse: true,
+  keys: true,
+  shrink: true,
+  right: -2,
+  top: -1,
+  padding: { left: 1, right: 1 },
+  content: "X",
+  style: {
+    bg: "red",
+    fg: "white",
+    hover: {
+      bg: "gray"
+    }
+  }
+});
+
+exitButton.on("press", () => process.exit(0));
+
+const reloadNginxButton = blessed.button({
+  parent: header,
+  mouse: true,
+  keys: true,
+  shrink: true,
+  right: 0,
+  bottom: 0,
+  padding: { left: 1, right: 1 },
+  content: "Reload Nginx",
+  style: {
+    bg: "yellow",
+    fg: "white",
+    hover: {
+      bg: "blue"
+    }
+  }
+});
+
+reloadNginxButton.on("press", async () => {
+  try {
+    NginxServer.reloadNginx();
+    footer.setContent("Nginx reloaded");
+  } catch (error: any) {
+    footer.setContent("Nginx reload failed: " + error.message);
+  }
+  screen.render();
+});
+
 
 async function tempEditor(options?: {
   extension?: string,
@@ -464,9 +544,12 @@ function setDetails(server: NginxServer) {
   details.setContent([
     `Status: ${server.enabled ? "\x1b[42m Enabled" : "\x1b[41m Disabled"} \x1b[0m`,
     `Name: ${server.name}`,
-    `Host: ${server.hosts}`,
-    `Port: ${server.port}`,
+    `Host: ${server.hosts.join(", ")}`,
+    `Port: ${server.port.join(", ")}`,
     `Root: ${server.root}`,
+    `Index: ${server.index.join(", ")}`,
+    `PHP: ${server.php}`,
+    `Proxy: ${server.proxyUrl}`,
   ].join("\n"));
 
   const detailsEdit = blessed.button({
