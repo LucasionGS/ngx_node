@@ -8,10 +8,10 @@ import YAML from "yaml";
 
 // Initialize config
 const user = userInfo();
-// if (user.username !== "root") {
-//   console.error("You must run this program as root");
-//   process.exit(1);
-// }
+if (user.username !== "root") {
+  console.error("You must run this program as root");
+  process.exit(1);
+}
 
 if (!existsSync(`${user.homedir}/.ngx`)) mkdirSync(`${user.homedir}/.config/ngx`, { recursive: true });
 class Config {
