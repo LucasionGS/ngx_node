@@ -1,0 +1,25 @@
+{
+  "name": "ngxg",
+  "version": "0.1.0",
+  "description": "A Blessed-based CLI for managing NGINX configurations (WIP, stability not guaranteed)",
+  "main": "dist/index.js",
+  "bin": {
+    "ngxg": "dist/index.js"
+  },
+  "scripts": {
+    "watch": "tsc -w",
+    "start": "node ."
+  },
+  "keywords": [],
+  "author": "Lucasion",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/blessed": "^0.1.21",
+    "@types/node": "^18.15.11",
+    "typescript": "^5.0.3"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "yaml": "^2.2.1"
+  }
+}
